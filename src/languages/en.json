@@ -143,5 +143,6 @@
     "ST143": "Confirm",
     "ST144": "Are you sure you want to delete your account?",
     "ST145": "This action can't be undone. We will delete all your data. Type your email address to confirm.",
-    "ST146": "Your email address don't match"
+    "ST146": "Your email address don't match",
+    "ST147": "suivi"
 }

@@ -119,7 +119,8 @@ if(isLoaded) {
 
   <View style={{marginHorizontal: 30, marginBottom: 40}}>
   <CustomButton Icon="dumbbell" Label={Strings.ST50} Click={() => onChangeScreen("customworkouts")}/>
-  <CustomButton Icon="silverware-fork-knife" Label={Strings.ST51} Click={() => onChangeScreen("customdiets")}/>
+ <CustomButton Icon="silverware-fork-knife" Label={Strings.ST51} Click={() => onChangeScreen("customdiets")} />
+<CustomButton Icon="chart-line" Label={Strings.ST147} Click={() => onChangeScreen("suivi")} />
   <CustomButton Icon="heart-outline" Label={Strings.ST4} Click={() => onChangeScreen("favorites")}/>
   <CustomButton Icon="bookmark-outline" Label={Strings.ST110} Click={() => onChangeScreen("about")}/>
   <CustomButton Icon="file-document-outline" Label={Strings.ST8} Click={() => onChangeScreen("terms")}/>

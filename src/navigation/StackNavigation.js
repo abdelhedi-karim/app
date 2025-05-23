@@ -32,6 +32,7 @@ import SingleTag from '../screens/SingleTag';
 import Favorites from '../screens/Favorites';
 import CustomWorkouts from '../screens/CustomWorkouts';
 import CustomDiets from '../screens/CustomDiets';
+import Suivi from '../screens/Suivi';
 
 const Stack = createStackNavigator();
 
@@ -80,6 +81,7 @@ return (
 	<Stack.Screen name="profile" component={Profile} options={{title: Strings.ST6, headerLeft: () => buttonBack()}} />
 	<Stack.Screen name="settings" component={Settings} options={{title: Strings.ST108, headerLeft: () => buttonBack()}} />
 	<Stack.Screen name="about" component={About} options={{title: Strings.ST110, headerLeft: () => buttonBack()}} />
+	<Stack.Screen name="suivi" component={Suivi} options={{title: Strings.ST147, headerLeft: () => buttonBack()}} />
 	<Stack.Screen name="terms" component={Terms} options={{title: Strings.ST8, headerLeft: () => buttonBack()}} />
 	<Stack.Screen name="workouts" component={Workouts} options={{title: Strings.ST5, headerLeft: () => buttonBack()}} />
 	<Stack.Screen name="exercises" component={Exercises} options={{title: Strings.ST21, headerLeft: () => buttonBack()}} />
