@@ -51,13 +51,12 @@ export default function Suivi(props) {
   const loadSuiviData = async (pageToLoad = 0, append = false) => {
     try {
       if (pageToLoad === 0) setLoading(true);
-      const response = await fetch('https://api.mahmoud-fitpro.com:8443/controller/get_suivi.php', {
+      const response = await fetch('https://api.mahmoud-fitpro.com:8443/json/data_suivi.php?mode=list', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ 
-          action: 'list',
           userid: auth.currentUser?.uid,
           page: pageToLoad,
           limit: PAGE_SIZE
@@ -100,14 +99,13 @@ export default function Suivi(props) {
 
   const handleDelete = async () => {
     try {
-      const response = await fetch('https://api.mahmoud-fitpro.com:8443/controller/delete_suivi.php', {
+      const response = await fetch('https://api.mahmoud-fitpro.com:8443/json/data_suivi.php?mode=delete', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ 
-          id: selectedItem.id,
-          action: 'delete'
+          id: selectedItem.id
         })
       });
       const text = await response.text();
@@ -132,15 +130,14 @@ export default function Suivi(props) {
 
   const handleEdit = async () => {
     try {
-      const response = await fetch('https://api.mahmoud-fitpro.com:8443/controller/edit_suivi.php', {
+      const response = await fetch('https://api.mahmoud-fitpro.com:8443/json/data_suivi.php?mode=edit', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           ...formData,
-          id: selectedItem.id,
-          action: 'update'
+          id: selectedItem.id
         })
       });
       const text = await response.text();
@@ -165,14 +162,13 @@ export default function Suivi(props) {
 
   const handleAdd = async () => {
     try {
-      const response = await fetch('https://api.mahmoud-fitpro.com:8443/controller/new_suivi.php', {
+      const response = await fetch('https://api.mahmoud-fitpro.com:8443/json/data_suivi.php?mode=add', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          ...formData,
-          action: 'create'
+          ...formData
         })
       });
       const text = await response.text();

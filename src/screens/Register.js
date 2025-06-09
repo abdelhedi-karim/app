@@ -6,7 +6,7 @@ import Languages from '../languages';
 import LanguageContext from '../languages/LanguageContext';
 import ColorsApp from '../config/ColorsApp';
 import usePreferences from '../hooks/usePreferences';
-import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
+import { getAuth, createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 
 const auth = getAuth();
 
@@ -44,7 +44,7 @@ export default function Register(props) {
 
       })
       await createUserWithEmailAndPassword(auth, email, password).then(() => {
-          updateProfile({
+          updateProfile(auth.currentUser, {
               displayName : name ? name : '',
           }).then(()=>{
               setLoading(false);
