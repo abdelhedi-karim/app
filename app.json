@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "FitBasic",
-    "slug": "FitBasic",
-    "version": "1.0.0",
+    "name": "MFpro",
+    "slug": "MFpro",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "splash": {
@@ -24,19 +24,10 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FFFFFF"
       },
-      "package": "com.wicombit.fitbasic"
+      "package": "com.futurcode.MFpro10"
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    },
-    "extra": {
-      "eas": {
-        "projectId": "68646af6-25a4-47e2-a20a-2b270bfc523a"
-      }
     }
-  },
-  "react-native-google-mobile-ads": {
-    "android_app_id": "ca-app-pub-4232853679195184~3551772168",
-    "ios_app_id": "ca-app-pub-4232853679195184~7742298619"
   }
 }

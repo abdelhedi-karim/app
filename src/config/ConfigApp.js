@@ -3,7 +3,7 @@
 const ConfigApp = {
 
     // backend url (with slash at end)
-    URL: "http://192.168.1.93/gym",
+    URL: "https://api.mahmoud-fitpro.com:8443/",
 
     DEFAULTLANG: "en",
 
