@@ -6,7 +6,7 @@ import Languages from '../languages';
 import LanguageContext from '../languages/LanguageContext';
 import ColorsApp from '../config/ColorsApp';
 import usePreferences from '../hooks/usePreferences';
-import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
+import { getAuth, createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 
 const auth = getAuth();
 
@@ -28,34 +28,33 @@ export default function Register(props) {
   };
 
   const register = async () => {
-
     setLoading(true);
-
-    if(email, password, checked != false) {
-      const errorHandler = ((e)=>{
-          if(e.code == 'auth/email-already-in-use'){
-            setLoading(false);
-            Alert.alert(Strings.ST104, Strings.ST36);
-             
-          } else {
-            setLoading(false);
-            Alert.alert(Strings.ST104, Strings.ST33);
-          }
-
-      })
-      await createUserWithEmailAndPassword(auth, email, password).then(() => {
-          updateProfile({
-              displayName : name ? name : '',
-          }).then(()=>{
-              setLoading(false);
-          }).catch(errorHandler);
-
-      }).catch(errorHandler)
-    }else{
+    if(email && password && checked) {
+      const errorHandler = (e) => {
+        if(e.code == 'auth/email-already-in-use'){
+          setLoading(false);
+          Alert.alert(Strings.ST104, Strings.ST36);
+        } else {
           setLoading(false);
           Alert.alert(Strings.ST104, Strings.ST33);
         }
-      }
+      };
+      await createUserWithEmailAndPassword(auth, email, password)
+        .then((userCredential) => {
+          updateProfile(userCredential.user, {
+            displayName: name ? name : '',
+          })
+          .then(() => {
+            setLoading(false);
+          })
+          .catch(errorHandler);
+        })
+        .catch(errorHandler);
+    } else {
+      setLoading(false);
+      Alert.alert(Strings.ST104, Strings.ST33);
+    }
+  }
 
   return (
 

@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, Alert, Platform, FlatList, RefreshControl } from 'react-native';
 import { DataTable, Button, Dialog, Portal, TextInput } from 'react-native-paper';
 import { getAuth } from 'firebase/auth';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import Styles from '../config/Styles';
 import Languages from '../languages';
 import LanguageContext from '../languages/LanguageContext';
 import AppLoading from '../components/InnerLoading';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import usePreferences from '../hooks/usePreferences';
 
 const auth = getAuth();
 
@@ -14,44 +15,61 @@ export default function Suivi(props) {
   const contextState = React.useContext(LanguageContext);
   const language = contextState.language;
   const Strings = Languages[language].texts;
+  const { theme } = usePreferences();
 
   const [isLoaded, setIsLoaded] = useState(false);
   const [suiviData, setSuiviData] = useState([]);
   const [page, setPage] = useState(0);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
   const [loading, setLoading] = useState(true);
   const [deleteDialogVisible, setDeleteDialogVisible] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
   const [editDialogVisible, setEditDialogVisible] = useState(false);
   const [addDialogVisible, setAddDialogVisible] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [datePickerMode, setDatePickerMode] = useState('date');
   const [formData, setFormData] = useState({
-    day: '',
+    day: new Date().toISOString().split('T')[0],
     eat: '',
     training: '',
-    userid: ''
+    userid: auth.currentUser?.uid || ''
   });
+  const [refreshing, setRefreshing] = useState(false);
+  const [fetchingMore, setFetchingMore] = useState(false);
+  const [listData, setListData] = useState([]);
+  const [hasMore, setHasMore] = useState(true);
+  const PAGE_SIZE = 10;
 
   useEffect(() => {
     loadSuiviData();
   }, []);
 
-  const loadSuiviData = async () => {
+  useEffect(() => {
+    setListData(suiviData.slice(0, PAGE_SIZE));
+    setHasMore(suiviData.length > PAGE_SIZE);
+  }, [suiviData]);
+
+  const loadSuiviData = async (pageToLoad = 0, append = false) => {
     try {
-      setLoading(true);
-      const response = await fetch('http://192.168.1.93/gym/controller/get_suivi.php', {
+      if (pageToLoad === 0) setLoading(true);
+      const response = await fetch('https://api.mahmoud-fitpro.com:8443/json/data_suivi.php?mode=list', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ action: 'list' }),
+        body: JSON.stringify({ 
+          userid: auth.currentUser?.uid,
+          page: pageToLoad,
+          limit: PAGE_SIZE
+        }),
       });
-
       const data = await response.json();
-
-      // Accept both {data: [...]} and [...] formats
       const items = Array.isArray(data) ? data : (data.data || []);
-      setSuiviData(items);
-
+      setHasMore(items.length === PAGE_SIZE);
+      if (append) {
+        setSuiviData(prev => [...prev, ...items]);
+      } else {
+        setSuiviData(items);
+      }
       setIsLoaded(true);
       setLoading(false);
     } catch (error) {
@@ -62,20 +80,42 @@ export default function Suivi(props) {
     }
   };
 
+  const handleLoadMore = () => {
+    if (fetchingMore || !hasMore) return;
+    setFetchingMore(true);
+    setTimeout(() => {
+      const nextData = suiviData.slice(0, listData.length + PAGE_SIZE);
+      setListData(nextData);
+      setHasMore(nextData.length < suiviData.length);
+      setFetchingMore(false);
+    }, 300);
+  };
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    setPage(0);
+    loadSuiviData(0, false).then(() => setRefreshing(false));
+  };
+
   const handleDelete = async () => {
     try {
-      const response = await fetch('http://192.168.1.93/gym/controller/delete_suivi.php', {
+      const response = await fetch('https://api.mahmoud-fitpro.com:8443/json/data_suivi.php?mode=delete', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ 
-          id: selectedItem.id,
-          action: 'delete'
+          id: selectedItem.id
         })
       });
-      
-      const result = await response.json();
+      const text = await response.text();
+      let result;
+      try {
+        result = JSON.parse(text);
+      } catch (jsonError) {
+        console.error('Raw response (delete):', text);
+        throw new Error('Server did not return valid JSON. See console for details.');
+      }
       if (result.success) {
         loadSuiviData();
         setDeleteDialogVisible(false);
@@ -90,19 +130,24 @@ export default function Suivi(props) {
 
   const handleEdit = async () => {
     try {
-      const response = await fetch('http://192.168.1.93/gym/controller/edit_suivi.php', {
+      const response = await fetch('https://api.mahmoud-fitpro.com:8443/json/data_suivi.php?mode=edit', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           ...formData,
-          id: selectedItem.id,
-          action: 'update'
+          id: selectedItem.id
         })
       });
-      
-      const result = await response.json();
+      const text = await response.text();
+      let result;
+      try {
+        result = JSON.parse(text);
+      } catch (jsonError) {
+        console.error('Raw response (edit):', text);
+        throw new Error('Server did not return valid JSON. See console for details.');
+      }
       if (result.success) {
         loadSuiviData();
         setEditDialogVisible(false);
@@ -117,26 +162,31 @@ export default function Suivi(props) {
 
   const handleAdd = async () => {
     try {
-      const response = await fetch('http://192.168.1.93/gym/controller/add_suivi.php', {
+      const response = await fetch('https://api.mahmoud-fitpro.com:8443/json/data_suivi.php?mode=add', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          ...formData,
-          action: 'create'
+          ...formData
         })
       });
-      
-      const result = await response.json();
+      const text = await response.text();
+      let result;
+      try {
+        result = JSON.parse(text);
+      } catch (jsonError) {
+        console.error('Raw response (add):', text);
+        throw new Error('Server did not return valid JSON. See console for details.');
+      }
       if (result.success) {
         loadSuiviData();
         setAddDialogVisible(false);
         setFormData({
-          day: '',
+          day: new Date().toISOString().split('T')[0],
           eat: '',
           training: '',
-          userid: ''
+          userid: auth.currentUser?.uid || ''
         });
       } else {
         throw new Error(result.message || 'Failed to add');
@@ -165,7 +215,7 @@ export default function Suivi(props) {
 
   const openAddDialog = () => {
     setFormData({
-      day: new Date().toISOString().split('T')[0], // Default to today's date
+      day: new Date().toISOString().split('T')[0],
       eat: '',
       training: '',
       userid: auth.currentUser?.uid || ''
@@ -173,62 +223,82 @@ export default function Suivi(props) {
     setAddDialogVisible(true);
   };
 
+  const showDatepicker = () => {
+    setShowDatePicker(true);
+  };
+
+  const onDateChange = (event, selectedDate) => {
+    setShowDatePicker(Platform.OS === 'ios'); // Keep picker open on iOS
+    
+    if (selectedDate) {
+      const formattedDate = selectedDate.toISOString().split('T')[0];
+      setFormData({...formData, day: formattedDate});
+    }
+  };
+
   if (!isLoaded) {
     return <AppLoading />;
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme === 'dark' ? '#121212' : '#fff' }]}> 
+      <ScrollView style={{ backgroundColor: theme === 'dark' ? '#121212' : '#fff' }}>
         <View style={Styles.HeaderProfile}>
-          <Text style={Styles.TextProfile}>{Strings.ST147}</Text>
           <Button 
             mode="contained" 
-            style={styles.addButton}
+            style={[styles.addButton, {flexDirection: 'row', alignItems: 'center', elevation: 4, shadowColor: '#388e3c', shadowOffset: {width: 0, height: 2}, shadowOpacity: 0.3, shadowRadius: 6, backgroundColor: theme === 'dark' ? '#388e3c' : '#4CAF50'}]}
             onPress={openAddDialog}
-            labelStyle={styles.buttonLabel}
+            labelStyle={[styles.buttonLabel, {fontWeight: 'bold', fontSize: 16, color: '#fff', letterSpacing: 1}]}
+            icon="plus-circle"
+            contentStyle={{flexDirection: 'row-reverse'}}
           >
             Add New
           </Button>
         </View>
-
         <View style={styles.tableContainer}>
           {loading ? (
-            <ActivityIndicator size="large" color="#0000ff" />
+            <ActivityIndicator size="large" color={theme === 'dark' ? '#fff' : '#0000ff'} />
           ) : (
-            <View>
-              {suiviData.length > 0 ? (
-                suiviData.slice(page * itemsPerPage, (page + 1) * itemsPerPage).map((item) => (
-                  <View key={item.id} style={styles.card}>
-                    <Text style={styles.cardDay}>{item.day}</Text>
-                    <Text style={styles.cardLabel}>What Eating:</Text>
-                    <Text style={styles.cardText}>{item.eat}</Text>
-                    <Text style={styles.cardLabel}>What Training:</Text>
-                    <Text style={styles.cardText}>{item.training}</Text>
+            <FlatList
+              data={listData}
+              keyExtractor={item => item.id?.toString()}
+              renderItem={({ item }) => (
+                <View style={styles.card}>
+                  <Text style={styles.cardDay}>{item.day}</Text>
+                  <Text style={styles.cardLabel}>What Eating:</Text>
+                  <Text style={styles.cardText}>{item.eat}</Text>
+                  <Text style={styles.cardLabel}>What Training:</Text>
+                  <Text style={styles.cardText}>{item.training}</Text>
+                  <View style={styles.cardActions}>
+                    <Button 
+                      mode="outlined" 
+                      onPress={() => openEditDialog(item)}
+                      style={styles.actionButton}
+                    >
+                      Edit
+                    </Button>
+                    <Button 
+                      mode="outlined" 
+                      onPress={() => openDeleteDialog(item)}
+                      style={[styles.actionButton, {borderColor: '#ff4444'}]}
+                      textColor="#ff4444"
+                    >
+                      Delete
+                    </Button>
                   </View>
-                ))
-              ) : (
+                </View>
+              )}
+              ListEmptyComponent={() => (
                 <View style={styles.noDataCard}>
                   <Text style={styles.noDataText}>No data available</Text>
                 </View>
               )}
-              {suiviData.length > 0 && (
-                <DataTable.Pagination
-                  page={page}
-                  numberOfPages={Math.ceil(suiviData.length / itemsPerPage)}
-                  onPageChange={(newPage) => setPage(newPage)}
-                  label={`${page * itemsPerPage + 1}-${Math.min(
-                    (page + 1) * itemsPerPage,
-                    suiviData.length
-                  )} of ${suiviData.length}`}
-                  itemsPerPage={itemsPerPage}
-                  onItemsPerPageChange={setItemsPerPage}
-                  itemsPerPageOptions={[5, 10, 15]}
-                  showFastPaginationControls
-                  selectPageDropdownLabel={'Rows per page'}
-                />
-              )}
-            </View>
+              onEndReached={handleLoadMore}
+              onEndReachedThreshold={0.2}
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              ListFooterComponent={fetchingMore && hasMore ? <ActivityIndicator size="small" color={theme === 'dark' ? '#fff' : '#388e3c'} style={{margin: 10}} /> : null}
+            />
           )}
         </View>
 
@@ -251,48 +321,78 @@ export default function Suivi(props) {
           <Dialog visible={editDialogVisible} onDismiss={() => setEditDialogVisible(false)}>
             <Dialog.Title>Edit Item</Dialog.Title>
             <Dialog.Content>
-              <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>Day</Text>
-                <TextInput
-                  label="Day"
-                  value={formData.day}
-                  onChangeText={(text) => setFormData({...formData, day: text})}
-                  style={styles.inputGreen}
-                  mode="outlined"
-                  placeholder="YYYY-MM-DD"
-                  theme={{ colors: { primary: '#388e3c', underlineColor: 'transparent' } }}
-                />
-                <Text style={styles.inputLabel}>What are you eating?</Text>
+              <View style={Styles.AuthContent}>
+                <Text style={[Styles.inputLabel, { color: theme === 'dark' ? '#fff' : '#388e3c' }]}>Day</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <TextInput
+                    label="Day"
+                    value={formData.day}
+                    onFocus={showDatepicker}
+                    style={Styles.AuthInput}
+                    mode="outlined"
+                    placeholder="YYYY-MM-DD"
+                    theme={{
+                      colors: {
+                        primary: theme === 'dark' ? '#4CAF50' : '#388e3c',
+                        text: theme === 'dark' ? '#fff' : '#000',
+                        placeholder: theme === 'dark' ? '#aaa' : '#888',
+                        background: theme === 'dark' ? '#1e1e1e' : '#fff',
+                      },
+                    }}
+                  />
+                  <Button 
+                    icon="calendar" 
+                    onPress={showDatepicker}
+                    style={{ marginLeft: 10, height: 56, justifyContent: 'center' }}
+                  >
+                    Pick Date
+                  </Button>
+                </View>
+                {showDatePicker && (
+                  <DateTimePicker
+                    value={new Date(formData.day)}
+                    mode={datePickerMode}
+                    display="default"
+                    onChange={onDateChange}
+                  />
+                )}
+                <Text style={[Styles.inputLabel, { color: theme === 'dark' ? '#fff' : '#388e3c' }]}>What are you eating?</Text>
                 <TextInput
                   label="Meals"
                   value={formData.eat}
                   onChangeText={(text) => setFormData({...formData, eat: text})}
-                  style={styles.inputGreen}
+                  style={Styles.AuthInput}
                   mode="outlined"
                   multiline
                   numberOfLines={3}
                   placeholder="Breakfast: ...\nLunch: ...\nDinner: ..."
-                  theme={{ colors: { primary: '#388e3c', underlineColor: 'transparent' } }}
+                  theme={{
+                    colors: {
+                      primary: theme === 'dark' ? '#4CAF50' : '#388e3c',
+                      text: theme === 'dark' ? '#fff' : '#000',
+                      placeholder: theme === 'dark' ? '#aaa' : '#888',
+                      background: theme === 'dark' ? '#1e1e1e' : '#fff',
+                    },
+                  }}
                 />
-                <Text style={styles.inputLabel}>What is your training?</Text>
+                <Text style={[Styles.inputLabel, { color: theme === 'dark' ? '#fff' : '#388e3c' }]}>What is your training?</Text>
                 <TextInput
                   label="Workout"
                   value={formData.training}
                   onChangeText={(text) => setFormData({...formData, training: text})}
-                  style={styles.inputGreen}
+                  style={Styles.AuthInput}
                   mode="outlined"
                   multiline
                   numberOfLines={3}
                   placeholder="Morning: ...\nEvening: ..."
-                  theme={{ colors: { primary: '#388e3c', underlineColor: 'transparent' } }}
-                />
-                <TextInput
-                  label="User ID"
-                  value={formData.userid}
-                  onChangeText={(text) => setFormData({...formData, userid: text})}
-                  style={styles.input}
-                  mode="outlined"
-                  disabled
+                  theme={{
+                    colors: {
+                      primary: theme === 'dark' ? '#4CAF50' : '#388e3c',
+                      text: theme === 'dark' ? '#fff' : '#000',
+                      placeholder: theme === 'dark' ? '#aaa' : '#888',
+                      background: theme === 'dark' ? '#1e1e1e' : '#fff',
+                    },
+                  }}
                 />
               </View>
             </Dialog.Content>
@@ -308,47 +408,78 @@ export default function Suivi(props) {
           <Dialog visible={addDialogVisible} onDismiss={() => setAddDialogVisible(false)}>
             <Dialog.Title>Add New Item</Dialog.Title>
             <Dialog.Content>
-              <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>Day</Text>
-                <TextInput
-                  label="Day"
-                  value={formData.day}
-                  onChangeText={(text) => setFormData({...formData, day: text})}
-                  style={styles.inputGreen}
-                  mode="outlined"
-                  placeholder="YYYY-MM-DD"
-                  theme={{ colors: { primary: '#388e3c', underlineColor: 'transparent' } }}
-                />
-                <Text style={styles.inputLabel}>What are you eating?</Text>
+              <View style={Styles.AuthContent}>
+                <Text style={[Styles.inputLabel, { color: theme === 'dark' ? '#fff' : '#388e3c' }]}>Day</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <TextInput
+                    label="Day"
+                    value={formData.day}
+                    onFocus={showDatepicker}
+                    style={Styles.AuthInput}
+                    mode="outlined"
+                    placeholder="YYYY-MM-DD"
+                    theme={{
+                      colors: {
+                        primary: theme === 'dark' ? '#4CAF50' : '#388e3c',
+                        text: theme === 'dark' ? '#fff' : '#000',
+                        placeholder: theme === 'dark' ? '#aaa' : '#888',
+                        background: theme === 'dark' ? '#1e1e1e' : '#fff',
+                      },
+                    }}
+                  />
+                  <Button 
+                    icon="calendar" 
+                    onPress={showDatepicker}
+                    style={{ marginLeft: 10, height: 56, justifyContent: 'center' }}
+                  >
+                    Pick Date
+                  </Button>
+                </View>
+                {showDatePicker && (
+                  <DateTimePicker
+                    value={new Date(formData.day)}
+                    mode={datePickerMode}
+                    display="default"
+                    onChange={onDateChange}
+                  />
+                )}
+                <Text style={[Styles.inputLabel, { color: theme === 'dark' ? '#fff' : '#388e3c' }]}>What are you eating?</Text>
                 <TextInput
                   label="Meals"
                   value={formData.eat}
                   onChangeText={(text) => setFormData({...formData, eat: text})}
-                  style={styles.inputGreen}
+                  style={Styles.AuthInput}
                   mode="outlined"
                   multiline
                   numberOfLines={3}
                   placeholder="Breakfast: ...\nLunch: ...\nDinner: ..."
-                  theme={{ colors: { primary: '#388e3c', underlineColor: 'transparent' } }}
+                  theme={{
+                    colors: {
+                      primary: theme === 'dark' ? '#4CAF50' : '#388e3c',
+                      text: theme === 'dark' ? '#fff' : '#000',
+                      placeholder: theme === 'dark' ? '#aaa' : '#888',
+                      background: theme === 'dark' ? '#1e1e1e' : '#fff',
+                    },
+                  }}
                 />
-                <Text style={styles.inputLabel}>What is your training?</Text>
+                <Text style={[Styles.inputLabel, { color: theme === 'dark' ? '#fff' : '#388e3c' }]}>What is your training?</Text>
                 <TextInput
                   label="Workout"
                   value={formData.training}
                   onChangeText={(text) => setFormData({...formData, training: text})}
-                  style={styles.inputGreen}
+                  style={Styles.AuthInput}
                   mode="outlined"
                   multiline
                   numberOfLines={3}
                   placeholder="Morning: ...\nEvening: ..."
-                  theme={{ colors: { primary: '#388e3c', underlineColor: 'transparent' } }}
-                />
-                <TextInput
-                  label="User ID"
-                  value={formData.userid}
-                  onChangeText={(text) => setFormData({...formData, userid: text})}
-                  style={styles.input}
-                  mode="outlined"
+                  theme={{
+                    colors: {
+                      primary: theme === 'dark' ? '#4CAF50' : '#388e3c',
+                      text: theme === 'dark' ? '#fff' : '#000',
+                      placeholder: theme === 'dark' ? '#aaa' : '#888',
+                      background: theme === 'dark' ? '#1e1e1e' : '#fff',
+                    },
+                  }}
                 />
               </View>
             </Dialog.Content>
@@ -366,80 +497,20 @@ export default function Suivi(props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#black',
+    backgroundColor: '#fff',
   },
   tableContainer: {
     paddingHorizontal: 10,
     paddingVertical: 10,
-  },
-  row: {
-    minHeight: 80,
-  },
-  dayColumn: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  eatColumn: {
-    flex: 2,
-    maxHeight: 80,
-  },
-  trainingColumn: {
-    flex: 2,
-    maxHeight: 80,
   },
   addButton: {
     marginTop: 10,
     backgroundColor: '#388e3c',
     borderRadius: 4,
   },
-  input: {
-    marginBottom: 10,
-    backgroundColor: '#fff',
-    borderColor: '#388e3c',
-    borderWidth: 1,
-    borderRadius: 6,
-  },
   buttonLabel: {
     fontSize: 12,
     paddingVertical: 4,
-  },
-  scrollCell: {
-    maxHeight: 80,
-  },
-  noDataCell: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 20,
-  },
-  noDataText: {
-    color: '#666',
-    fontSize: 16,
-  },
-  inputContainer: {
-    backgroundColor: '#e8f5e9',
-    borderRadius: 10,
-    padding: 16,
-    margin: 16,
-    marginBottom: 0,
-    shadowColor: '#388e3c',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  inputLabel: {
-    color: '#388e3c',
-    fontWeight: 'bold',
-    marginBottom: 4,
-    marginTop: 10,
-    fontSize: 16,
-  },
-  inputGreen: {
-    backgroundColor: '#fff',
-    borderColor: '#388e3c',
-    borderWidth: 1,
-    borderRadius: 6,
-    marginBottom: 10,
   },
   card: {
     backgroundColor: '#e8f5e9',
@@ -470,6 +541,15 @@ const styles = StyleSheet.create({
     fontSize: 15,
     marginBottom: 4,
   },
+  cardActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 10,
+  },
+  actionButton: {
+    marginLeft: 10,
+    borderColor: '#388e3c',
+  },
   noDataCard: {
     backgroundColor: '#fff',
     borderRadius: 10,
@@ -478,5 +558,9 @@ const styles = StyleSheet.create({
     margin: 16,
     borderWidth: 1,
     borderColor: '#e0e0e0',
+  },
+  noDataText: {
+    color: '#666',
+    fontSize: 16,
   },
 });
