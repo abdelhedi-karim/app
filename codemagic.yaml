@@ -1,0 +1,19 @@
+workflows:
+  build_and_test:
+    name: Build and Test
+    environment:
+      vars:
+        EXPO_TOKEN: $EXPO_TOKEN
+      node: latest
+    scripts:
+      - npm install -g expo-cli
+      - npm ci
+      - expo build:android --non-interactive
+      - expo build:ios --non-interactive
+    artifacts:
+      - app/build/**/*.apk
+      - app/build/**/*.ipa
+    publishing:
+      email:
+        recipients:
+          - your@email.com
